@@ -23,7 +23,9 @@ export default function MenuManagement() {
 
       if (error) throw error;
 
-      setSpecial(data.filter((item) => item.special_item === true) as MenuItem[]);
+      setSpecial(
+        data.filter((item) => item.special_item === true) as MenuItem[]
+      );
       setMenu(data.filter((item) => item.special_item === false) as MenuItem[]);
     } catch (error) {
       console.error("Error fetching menu:", error);
@@ -61,9 +63,16 @@ export default function MenuManagement() {
         </button>
       </div>
 
-      {isLoading && <p>Loading menu...</p>}
+      {isLoading && (
+        <div className="flex justify-center items-center py-10">
+          <p className="text-gray-500 animate-pulse">Loading menu...</p>
+        </div>
+      )}
+
       {errorMsg && <p className="text-red-500">{errorMsg}</p>}
-      {!isLoading && menu.length === 0 && <p className="text-gray-500 text-center">No menu items found.</p>}
+      {!isLoading && menu.length === 0 && (
+        <p className="text-gray-500 text-center">No menu items found.</p>
+      )}
 
       <div className="px-10">
         {special.length > 0 ? (

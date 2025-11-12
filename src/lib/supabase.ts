@@ -5,7 +5,8 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type OrderStatus = 'pending'|'completed'|'cancelled';
+export type OrderStatus = 'pending'|'completed'|'cancelled'|'active';
+export type itemStatus = 'pending'|'completed'|'cancelled';
 
 export interface MenuItem {
   id: string;
@@ -34,11 +35,12 @@ export interface Order {
 }
 
 export interface OrderItem {
+  item_id:string
   order_id: string;
   menu_item_id: string;
   quantity: number;
   price_at_time: number;
-  
+  order_item_status: itemStatus;
 }
 
 export interface FullOrder extends Order {

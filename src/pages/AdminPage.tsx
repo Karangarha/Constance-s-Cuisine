@@ -39,16 +39,9 @@ export default function AdminPage() {
         .from("orders")
         .select(
           `
-          id,
-          customer_name,
-          customer_email,
-          customer_phone,
-          total_amount,
-          created_at,
-          status,
+          *,
           order_items (
-            quantity,
-            price_at_time,
+            *,
             menu_items ( name )
           )
         `
