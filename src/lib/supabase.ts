@@ -36,7 +36,7 @@ export interface Order {
 
 export interface OrderItem {
   item_id:string
-  order_id: string;
+  order_id: number;
   menu_item_id: string;
   quantity: number;
   price_at_time: number;
