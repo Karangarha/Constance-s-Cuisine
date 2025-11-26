@@ -1,4 +1,4 @@
-import { MinusCircle, PenSquare, PlusCircle, Trash2 } from "lucide-react";
+import { MinusCircle, PenSquare, PlusCircle, Trash2, Truck, Store, MapPin, Phone, Mail, RotateCcw } from "lucide-react";
 import { FullOrder, supabase, OrderStatus, itemStatus } from "../lib/supabase";
 import { useEffect, useMemo, useState } from "react";
 import OrderFilter from "../logic/OrderFilter";
@@ -7,7 +7,7 @@ import toaster from "../ui/toaster";
 interface OrderProps {
   Orders: FullOrder[];
   loading: boolean;
-  refreshOrders: () => Promise<void>;
+  refreshOrders: (showLoading?: boolean) => Promise<void>;
 }
 
 interface LocalOrderItem {
@@ -16,14 +16,6 @@ interface LocalOrderItem {
   order_item_status: itemStatus;
 }
 
-/**
- * Orders component (refactored)
- *
- * - Uses localEditedItems: a mapping of item_id -> LocalOrderItem for the order currently being edited
- * - Ensures quantity is always >= 1 (DB constraint)
- * - Cancelling an item toggles status to 'cancelled' but keeps quantity >= 1
- * - Batch updates quantity + status for all edited items
- */
 export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
   // UI state
   const [filteredOrders, setFilteredOrders] = useState<FullOrder[]>(Orders);
@@ -32,6 +24,7 @@ export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
 
   // Mapping item_id => LocalOrderItem for currently edited order
   const [localEditedItems, setLocalEditedItems] = useState<Record<string, LocalOrderItem>>({});
+  const [editedAddress, setEditedAddress] = useState<string>("");
 
   // Order-level confirm (complete / cancel)
   const [confirmOrder, setConfirmOrder] = useState<number | null>(null);
@@ -57,6 +50,7 @@ export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
     });
 
     setLocalEditedItems(itemsMap);
+    setEditedAddress(order.delivery_address || "");
     setIsEdit(true);
     setEditOrderId(orderId);
   };
@@ -64,6 +58,7 @@ export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
   // revert edits
   const cancelEdit = () => {
     setLocalEditedItems({});
+    setEditedAddress("");
     setIsEdit(false);
     setEditOrderId(null);
   };
@@ -97,53 +92,113 @@ export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
   };
 
   // Batch update edited items to Supabase
-  const updateItemStatus = async (items: LocalOrderItem[]) => {
-    if (items.length === 0) {
+  const updateOrderData = async (items: LocalOrderItem[], address: string) => {
+    const currentOrder = Orders.find(o => o.id === editOrderId);
+    if (!currentOrder) return;
+
+    // Check if anything changed
+    const addressChanged = currentOrder.delivery_method === 'delivery' && address !== currentOrder.delivery_address;
+    const itemsChanged = items.some(item => {
+      const original = currentOrder.order_items.find(i => i.item_id === item.item_id);
+      return original && (original.quantity !== item.quantity || original.order_item_status !== item.order_item_status);
+    });
+
+    if (!itemsChanged && !addressChanged) {
       toaster({ type: "info", message: "No changes to save." });
       return;
     }
 
     try {
-      // Map each item to an update promise
-      await Promise.all(
-        items.map(({ item_id, order_item_status, quantity }) =>
-          supabase
-            .from("order_items")
-            .update({
-              order_item_status,
-              quantity,
-            })
-            .eq("item_id", item_id)
-        )
-      );
+      // 1. Update items
+      if (items.length > 0) {
+        await Promise.all(
+          items.map(({ item_id, order_item_status, quantity }) =>
+            supabase
+              .from("order_items")
+              .update({
+                order_item_status,
+                quantity,
+              })
+              .eq("item_id", item_id)
+          )
+        );
+      }
 
-      toaster({ type: "success", message: "Items updated successfully!" });
-      await refreshOrders();
+      // 2. Check if ALL items are now cancelled
+      // Merge current items with updates to get the final state
+      const allItemsStatus = currentOrder.order_items.map(original => {
+        const updated = items.find(i => i.item_id === original.item_id);
+        return updated ? updated.order_item_status : original.order_item_status;
+      });
+
+      const allCancelled = allItemsStatus.every(status => status === 'cancelled');
+
+      // 3. Calculate new total amount
+      let newTotal = 0;
+      currentOrder.order_items.forEach(originalItem => {
+        const updatedItem = items.find(i => i.item_id === originalItem.item_id);
+        const quantity = updatedItem ? updatedItem.quantity : originalItem.quantity;
+        const status = updatedItem ? updatedItem.order_item_status : originalItem.order_item_status;
+
+        if (status !== 'cancelled') {
+          newTotal += quantity * originalItem.price_at_time;
+        }
+      });
+
+      // 4. Update order (address + total_amount + potentially status)
+      const updates: any = { total_amount: newTotal };
+      if (addressChanged) {
+        updates.delivery_address = address;
+      }
+      if (allCancelled) {
+        updates.status = 'cancelled';
+      }
+
+      const { error } = await supabase
+        .from("orders")
+        .update(updates)
+        .eq("id", editOrderId);
+
+      if (error) throw error;
+
+      toaster({ type: "success", message: allCancelled ? "Order cancelled (all items cancelled)." : "Order updated successfully!" });
+      await refreshOrders(false);
       cancelEdit();
     } catch (err) {
-      console.error("Failed to update order items:", err);
-      toaster({ type: "error", message: "Failed to update items. Check console." });
+      console.error("Failed to update order:", err);
+      toaster({ type: "error", message: "Failed to update order. Check console." });
     }
   };
 
   // Save edited items for current order
-  const saveEditedItems = async () => {
+  const saveChanges = async () => {
     const items = Object.values(localEditedItems);
-    await updateItemStatus(items);
+    await updateOrderData(items, editedAddress);
   };
 
   // Order status update (complete / cancel)
   const handleOrderStatus = async (orderId: number, status: OrderStatus) => {
     try {
+      // Update order status
       const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
       if (error) throw error;
+
+      // If cancelling order, also cancel ALL items
+      if (status === 'cancelled') {
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .update({ order_item_status: 'cancelled' })
+          .eq("order_id", orderId);
+
+        if (itemsError) throw itemsError;
+      }
 
       toaster({
         type: status === "completed" ? "success" : "error",
         message: status === "completed" ? `Order #${orderId} marked as completed!` : `Order #${orderId} has been cancelled.`,
       });
 
-      await refreshOrders();
+      await refreshOrders(false);
     } catch (error) {
       console.error("Failed to update order:", error);
       toaster({ type: "error", message: "Failed to update order status." });
@@ -172,155 +227,269 @@ export default function Orders({ Orders, loading, refreshOrders }: OrderProps) {
   if (loading) return <p>Loading...</p>;
 
   return (
-    <div>
-      <h2 className="text-2xl font-semibold mb-4">Orders</h2>
+    <div className="max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-3xl font-bold text-gray-800">Orders</h2>
+        <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-200">
+          <span className="text-gray-500 mr-2">Total Orders:</span>
+          <span className="font-bold text-gray-800">{filteredOrders.length}</span>
+        </div>
+      </div>
 
       <OrderFilter orders={Orders} onFilter={setFilteredOrders} />
 
       {filteredOrders.length === 0 ? (
-        <p>No matching orders found.</p>
+        <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200 mt-6">
+          <p className="text-gray-500 text-lg">No matching orders found.</p>
+        </div>
       ) : (
-        <>
-          <div className="pb-5">
-            <h3>Number of Orders: {filteredOrders.length}</h3>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          {filteredOrders.map((order) => {
+            const editingThis = isEdit && editOrderId === order.id;
+            const localItems = editingThis ? localEditedItems : orderItemLookup[order.id] ?? {};
 
-          <div className="space-y-4">
-            {filteredOrders.map((order) => {
-              const editingThis = isEdit && editOrderId === order.id;
-              const localItems = editingThis ? localEditedItems : orderItemLookup[order.id] ?? {};
-              return (
-                <div
-                  key={order.id}
-                  className="relative bg-white p-5 rounded-lg shadow-md hover:shadow-lg transition"
-                >
-                  {/* Edit button */}
-                  <button
-                    onClick={() => (editingThis ? cancelEdit() : startEdit(order.id))}
-                    className="absolute right-4 top-4 text-gray-500 hover:text-blue-600"
-                    aria-label={editingThis ? "Close edit" : "Edit order"}
-                  >
-                    <PenSquare size={18} />
-                  </button>
+            return (
+              <div
+                key={order.id}
+                className={`relative bg-white rounded-xl shadow-sm border transition-all duration-200 overflow-hidden ${editingThis ? 'ring-2 ring-blue-500 border-transparent' : 'border-gray-200 hover:shadow-md'
+                  }`}
+              >
+                {/* Header */}
+                <div className="p-6 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="font-bold text-lg text-gray-800">
+                          Order #{order.id}
+                        </h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${order.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                            'bg-yellow-100 text-yellow-700'
+                          }`}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <p className="text-gray-600 font-medium">{order.customer_name}</p>
 
-                  {/* Order details */}
-                  <h3 className="font-semibold text-lg mb-1">
-                    Order #{order.id} — <span className="capitalize">{order.status}</span>
-                  </h3>
-                  <p className="text-sm text-gray-600">{order.customer_name}</p>
-                  <p className="font-medium mt-2">Total: ${Number(order.total_amount).toFixed(2)}</p>
+                      {/* Contact Info */}
+                      <div className="flex flex-col gap-1 mt-2 text-sm text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <Mail size={14} />
+                          <span>{order.customer_email}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Phone size={14} />
+                          <span>{order.customer_phone}</span>
+                        </div>
+                      </div>
+                    </div>
 
-                  {/* Items */}
-                  <ul className="list-disc ml-6 text-sm mt-2 text-gray-700">
-                    {order.order_items.map((item) => {
-                      const local = localItems[item.item_id] ?? {
-                        item_id: item.item_id,
-                        quantity: Math.max(1, item.quantity),
-                        order_item_status: item.order_item_status,
-                      };
+                    <button
+                      onClick={() => (editingThis ? cancelEdit() : startEdit(order.id))}
+                      className={`p-2 rounded-lg transition-colors ${editingThis
+                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                        }`}
+                      title={editingThis ? "Cancel editing" : "Edit order"}
+                    >
+                      <PenSquare size={20} />
+                    </button>
+                  </div>
 
-                      return (
-                        <li key={item.item_id}>
-                          <div className="flex justify-between items-center">
-                            <div className={local.order_item_status === "cancelled" ? "line-through text-red-500" : ""}>
-                              {item.menu_items.name} × {local.quantity}
+                  {/* Delivery Info Badge */}
+                  <div className="flex flex-col gap-2 mt-3">
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md ${order.delivery_method === 'delivery'
+                        ? 'bg-orange-50 text-orange-700 border border-orange-100'
+                        : 'bg-blue-50 text-blue-700 border border-blue-100'
+                        }`}>
+                        {order.delivery_method === 'delivery' ? (
+                          <>
+                            <Truck size={14} />
+                            <span className="font-semibold">Delivery</span>
+                          </>
+                        ) : (
+                          <>
+                            <Store size={14} />
+                            <span className="font-semibold">Pickup</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {order.delivery_method === 'delivery' && (
+                      <div className="flex items-start gap-2 text-sm text-gray-600 bg-white p-2 rounded border border-gray-100">
+                        <MapPin size={14} className="mt-0.5 flex-shrink-0 text-gray-400" />
+                        {editingThis ? (
+                          <input
+                            type="text"
+                            value={editedAddress}
+                            onChange={(e) => setEditedAddress(e.target.value)}
+                            className="w-full border-b border-gray-300 focus:border-blue-500 outline-none px-1 py-0.5 bg-transparent"
+                            placeholder="Enter delivery address"
+                          />
+                        ) : (
+                          <span>{order.delivery_address}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-6">
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Order Items</h4>
+                    <ul className="space-y-3">
+                      {order.order_items.map((item) => {
+                        const local = localItems[item.item_id] ?? {
+                          item_id: item.item_id,
+                          quantity: Math.max(1, item.quantity),
+                          order_item_status: item.order_item_status,
+                        };
+
+                        const originalItem = order.order_items.find(i => i.item_id === item.item_id);
+                        const originalQuantity = originalItem ? originalItem.quantity : 0;
+                        const hasQuantityChanged = local.quantity !== originalQuantity;
+
+                        return (
+                          <li key={item.item_id} className="flex items-start justify-between group">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 ${local.order_item_status === "cancelled" ? "bg-red-400" : "bg-green-400"
+                                }`} />
+                              <span className={`text-gray-700 ${local.order_item_status === "cancelled" ? "line-through text-gray-400" : ""
+                                }`}>
+                                <span className="font-medium">{local.quantity}x</span> {item.menu_items.name}
+                                {hasQuantityChanged && editingThis && (
+                                  <span className="ml-2 text-xs text-orange-500 font-medium">
+                                    (Was: {originalQuantity})
+                                  </span>
+                                )}
+                              </span>
                             </div>
 
-                            {/* Edit controls shown only when editing this order */}
                             {editingThis && (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg border border-gray-100">
                                 <button
                                   onClick={() => setItemQuantity(item.item_id, local.quantity - 1)}
-                                  aria-label="decrease quantity"
-                                  className="disabled:opacity-50"
+                                  className="p-1 hover:bg-white rounded-md text-gray-500 hover:text-red-500 transition-colors disabled:opacity-30"
+                                  disabled={local.quantity <= 1}
                                 >
-                                  <MinusCircle className="bg-red-500 rounded-full" color="white" size={18} />
+                                  <MinusCircle size={16} />
                                 </button>
 
-                                <input
-                                  type="number"
-                                  min={1}
-                                  value={local.quantity}
-                                  onChange={(e) => setItemQuantity(item.item_id, Number(e.target.value))}
-                                  className="w-14 text-center border rounded-md"
-                                />
+                                <span className="w-8 text-center font-medium text-sm">{local.quantity}</span>
 
                                 <button
                                   onClick={() => setItemQuantity(item.item_id, local.quantity + 1)}
-                                  aria-label="increase quantity"
+                                  className="p-1 hover:bg-white rounded-md text-gray-500 hover:text-green-500 transition-colors"
                                 >
-                                  <PlusCircle className="bg-green-500 rounded-full" color="white" size={18} />
+                                  <PlusCircle size={16} />
                                 </button>
 
-                                {/* Cancel / uncancel toggle */}
+                                {hasQuantityChanged && (
+                                  <button
+                                    onClick={() => setItemQuantity(item.item_id, originalQuantity)}
+                                    className="p-1 hover:bg-white rounded-md text-orange-400 hover:text-orange-600 transition-colors"
+                                    title="Revert quantity"
+                                  >
+                                    <RotateCcw size={14} />
+                                  </button>
+                                )}
+
+                                <div className="w-px h-4 bg-gray-200 mx-1" />
+
                                 <button
                                   onClick={() => toggleItemCancelled(item.item_id)}
-                                  className={`px-2 py-1 rounded-md border ${
-                                    local.order_item_status === "cancelled" ? "bg-red-100 border-red-400" : "bg-gray-100"
-                                  }`}
-                                  title={local.order_item_status === "cancelled" ? "Uncancel item" : "Cancel item"}
+                                  className={`p-1 rounded-md transition-colors ${local.order_item_status === "cancelled"
+                                    ? "bg-red-100 text-red-600"
+                                    : "text-gray-400 hover:text-red-500 hover:bg-white"
+                                    }`}
+                                  title={local.order_item_status === "cancelled" ? "Restore item" : "Cancel item"}
                                 >
-                                  <Trash2 size={14} />
+                                  <Trash2 size={16} />
                                 </button>
                               </div>
                             )}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
 
-                  {/* Footer actions */}
-                  <div className="mt-4 flex gap-x-3">
+                  <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                    <span className="text-gray-500">Total Amount</span>
+                    <span className="text-xl font-bold text-gray-800">
+                      ${Number(order.total_amount).toFixed(2)}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="mt-6 pt-4 border-t border-gray-100">
                     {editingThis ? (
-                      <>
-                        <button onClick={cancelEdit} className="bg-gray-400 hover:bg-gray-500 text-white py-1 rounded-md w-full">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={cancelEdit}
+                          className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                        >
                           Cancel
                         </button>
                         <button
-                          onClick={saveEditedItems}
-                          className="bg-blue-600 hover:bg-blue-700 text-white py-1 rounded-md w-full"
+                          onClick={saveChanges}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors"
                         >
-                          Save changes
+                          Save Changes
                         </button>
-                      </>
+                      </div>
                     ) : confirmOrder === order.id ? (
-                      <>
-                        <button onClick={() => { setConfirmOrder(null); setConfirmOrderStatus("pending"); }} className="bg-gray-400 hover:bg-gray-500 text-white py-1 rounded-md w-full">
-                          Go Back
-                        </button>
-                        <button
-                          onClick={() => handleOrderStatus(order.id, confirmOrderStatus)}
-                          className={`${
-                            confirmOrderStatus === "completed" ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"
-                          } text-white py-1 rounded-md w-full`}
-                        >
-                          Confirm
-                        </button>
-                      </>
+                      <div className="space-y-3 animate-fadeIn">
+                        <div className="text-center mb-2">
+                          <p className="text-sm text-gray-600">
+                            Confirm {confirmOrderStatus} status?
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => { setConfirmOrder(null); setConfirmOrderStatus("pending"); }}
+                            className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={() => handleOrderStatus(order.id, confirmOrderStatus)}
+                            className={`px-4 py-2 text-white rounded-lg font-medium shadow-sm transition-colors ${confirmOrderStatus === "completed"
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-red-600 hover:bg-red-700"
+                              }`}
+                          >
+                            Confirm
+                          </button>
+                        </div>
+                      </div>
                     ) : (
-                      <>
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-3">
                         <button
                           onClick={() => { setConfirmOrder(order.id); setConfirmOrderStatus("completed"); }}
-                          className="bg-blue-500 hover:bg-blue-600 text-white py-1 rounded-md w-full"
+                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium shadow-sm transition-colors flex justify-center items-center gap-2"
                         >
-                          Complete
+                          Mark as Completed
                         </button>
 
                         <button
                           onClick={() => { setConfirmOrder(order.id); setConfirmOrderStatus("cancelled"); }}
-                          className="bg-red-500 hover:bg-red-600 text-white py-1 rounded-md w-12 flex justify-center items-center"
+                          className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-medium transition-colors"
+                          title="Cancel Order"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={18} />
                         </button>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

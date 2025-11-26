@@ -1,10 +1,36 @@
+import { useState, useEffect } from 'react';
 import { ChefHat, Clock, Award } from 'lucide-react';
+import { supabase, MenuItem } from '../lib/supabase';
+import { useCart } from '../context/CartContext';
+import Carousel from '../components/Carousel';
 
 interface HomePageProps {
   onNavigate: (page: 'menu') => void;
 }
 
 export default function HomePage({ onNavigate }: HomePageProps) {
+  const [specialItems, setSpecialItems] = useState<MenuItem[]>([]);
+  const { addToCart } = useCart();
+
+  useEffect(() => {
+    fetchSpecialItems();
+  }, []);
+
+  const fetchSpecialItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('special_item', true)
+        .eq('available', true);
+
+      if (error) throw error;
+      setSpecialItems(data || []);
+    } catch (error) {
+      console.error('Error fetching special items:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <section
@@ -28,6 +54,17 @@ export default function HomePage({ onNavigate }: HomePageProps) {
           </button>
         </div>
       </section>
+
+      {specialItems.length > 0 && (
+        <section className="py-20 bg-orange-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-4xl font-bold text-center text-gray-800 mb-12">
+              Chef's Specials
+            </h2>
+            <Carousel items={specialItems} onAddToCart={addToCart} />
+          </div>
+        </section>
+      )}
 
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

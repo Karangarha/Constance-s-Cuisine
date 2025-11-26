@@ -21,8 +21,16 @@ export default function AdminPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "orders" },
         (payload) => {
-          console.log("Change received:", payload);
-          fetchOrders();
+          console.log("Order change received:", payload);
+          fetchOrders(false); // silent refresh
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "order_items" },
+        (payload) => {
+          console.log("Order Item change received:", payload);
+          fetchOrders(false); // silent refresh
         }
       )
       .subscribe();
@@ -32,9 +40,9 @@ export default function AdminPage() {
     };
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const { data, error } = await supabase
         .from("orders")
         .select(
@@ -53,26 +61,26 @@ export default function AdminPage() {
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
   const renderMenu = () => (
     <div>
-      <MenuManagement/>
+      <MenuManagement />
     </div>
   );
 
-  
+
 
   const renderContent = () => {
     switch (currentTab) {
       case "order history":
-        return <OrderHistory Orders={orders} />;
+        return <OrderHistory Orders={orders} refreshOrders={fetchOrders} />;
       case "menu":
         return renderMenu();
       case "analytics":
-        return <Analytics/>;
+        return <Analytics />;
       default:
         return (
           <Orders
@@ -92,41 +100,37 @@ export default function AdminPage() {
         <nav className="space-y-3">
           <button
             onClick={() => setCurrentTab("orders")}
-            className={`block w-full text-left px-3 py-2 rounded ${
-              currentTab === "orders"
-                ? "bg-blue-500 text-white"
-                : "hover:bg-gray-200"
-            }`}
+            className={`block w-full text-left px-3 py-2 rounded ${currentTab === "orders"
+              ? "bg-blue-500 text-white"
+              : "hover:bg-gray-200"
+              }`}
           >
             Orders
           </button>
           <button
             onClick={() => setCurrentTab("order history")}
-            className={`block w-full text-left px-3 py-2 rounded ${
-              currentTab === "order history"
-                ? "bg-blue-500 text-white"
-                : "hover:bg-gray-200"
-            }`}
+            className={`block w-full text-left px-3 py-2 rounded ${currentTab === "order history"
+              ? "bg-blue-500 text-white"
+              : "hover:bg-gray-200"
+              }`}
           >
             Order History
           </button>
           <button
             onClick={() => setCurrentTab("menu")}
-            className={`block w-full text-left px-3 py-2 rounded ${
-              currentTab === "menu"
-                ? "bg-blue-500 text-white"
-                : "hover:bg-gray-200"
-            }`}
+            className={`block w-full text-left px-3 py-2 rounded ${currentTab === "menu"
+              ? "bg-blue-500 text-white"
+              : "hover:bg-gray-200"
+              }`}
           >
             Menu Management
           </button>
           <button
             onClick={() => setCurrentTab("analytics")}
-            className={`block w-full text-left px-3 py-2 rounded ${
-              currentTab === "analytics"
-                ? "bg-blue-500 text-white"
-                : "hover:bg-gray-200"
-            }`}
+            className={`block w-full text-left px-3 py-2 rounded ${currentTab === "analytics"
+              ? "bg-blue-500 text-white"
+              : "hover:bg-gray-200"
+              }`}
           >
             Analytics
           </button>

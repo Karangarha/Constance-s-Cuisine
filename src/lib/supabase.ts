@@ -32,6 +32,8 @@ export interface Order {
   total_amount: number;
   status: OrderStatus;
   created_at: string;
+  delivery_method: 'pickup' | 'delivery';
+  delivery_address?: string;
 }
 
 export interface OrderItem {
@@ -44,7 +46,7 @@ export interface OrderItem {
 }
 
 export interface FullOrder extends Order {
-  order_items: (OrderItem & { menu_items: MenuItem[] })[];
+  order_items: (OrderItem & { menu_items: MenuItem })[];
 }
 
 
