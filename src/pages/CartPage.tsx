@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Minus, Plus, Trash2, ShoppingBag } from 'lucide-react';
+import { Minus, Plus, Trash2, ShoppingBag, Truck, Store, MapPin } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
 
@@ -15,6 +15,10 @@ export default function CartPage({ onNavigate }: CartPageProps) {
     name: '',
     email: '',
     phone: '',
+    deliveryMethod: 'pickup' as 'pickup' | 'delivery',
+    address: '',
+    city: '',
+    zipCode: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -45,6 +49,11 @@ export default function CartPage({ onNavigate }: CartPageProps) {
           customer_phone: formData.phone,
           total_amount: totalAmount,
           status: 'pending',
+          delivery_method: formData.deliveryMethod,
+          delivery_address:
+            formData.deliveryMethod === 'delivery'
+              ? `${formData.address}, ${formData.city}, ${formData.zipCode}`
+              : undefined,
         })
         .select()
         .single();
@@ -66,7 +75,15 @@ export default function CartPage({ onNavigate }: CartPageProps) {
 
       setOrderSuccess(true);
       clearCart();
-      setFormData({ name: '', email: '', phone: '' });
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        deliveryMethod: 'pickup',
+        address: '',
+        city: '',
+        zipCode: '',
+      });
       setTimeout(() => {
         setOrderSuccess(false);
         setShowCheckout(false);
@@ -152,6 +169,89 @@ export default function CartPage({ onNavigate }: CartPageProps) {
                   placeholder="(555) 123-4567"
                 />
               </div>
+
+              <div>
+                <label className="block text-gray-700 font-medium mb-4">
+                  Delivery Method
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, deliveryMethod: 'pickup' })
+                    }
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${formData.deliveryMethod === 'pickup'
+                      ? 'border-orange-600 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 hover:border-orange-200 text-gray-600'
+                      }`}
+                  >
+                    <Store className="h-8 w-8 mb-2" />
+                    <span className="font-bold">Pickup</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData({ ...formData, deliveryMethod: 'delivery' })
+                    }
+                    className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${formData.deliveryMethod === 'delivery'
+                      ? 'border-orange-600 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 hover:border-orange-200 text-gray-600'
+                      }`}
+                  >
+                    <Truck className="h-8 w-8 mb-2" />
+                    <span className="font-bold">Delivery</span>
+                  </button>
+                </div>
+              </div>
+
+              {formData.deliveryMethod === 'delivery' && (
+                <div className="space-y-4 animate-fadeIn">
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">
+                      Delivery Address
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        required
+                        value={formData.address}
+                        onChange={(e) =>
+                          setFormData({ ...formData, address: e.target.value })
+                        }
+                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="Street Address"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <input
+                        type="text"
+                        required
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value })
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="City"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        required
+                        value={formData.zipCode}
+                        onChange={(e) =>
+                          setFormData({ ...formData, zipCode: e.target.value })
+                        }
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="ZIP Code"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="border-t pt-6">
                 <div className="flex justify-between text-2xl font-bold text-gray-800 mb-6">
                   <span>Total:</span>
