@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
-import { supabase, MenuItem } from '../lib/supabase';
-import { useCart } from '../context/CartContext';
+import { useState, useEffect } from "react";
+import { Plus } from "lucide-react";
+import { supabase, MenuItem } from "../lib/supabase";
+import { useCart } from "../context/CartContext";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const { addToCart } = useCart();
 
   useEffect(() => {
@@ -16,24 +16,24 @@ export default function MenuPage() {
   const fetchMenuItems = async () => {
     try {
       const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('available', true)
-        .order('category', { ascending: true });
+        .from("menu_items")
+        .select("*")
+        .eq("available", true)
+        .order("category", { ascending: true });
 
       if (error) throw error;
       setMenuItems(data || []);
     } catch (error) {
-      console.error('Error fetching menu items:', error);
+      console.error("Error fetching menu items:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const categories = ['all', 'appetizer', 'main', 'dessert'];
+  const categories = ["all", "appetizer", "main", "dessert"];
 
   const filteredItems =
-    selectedCategory === 'all'
+    selectedCategory === "all"
       ? menuItems
       : menuItems.filter((item) => item.category === selectedCategory);
 
@@ -64,10 +64,10 @@ export default function MenuPage() {
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`px-6 py-3 rounded-full font-medium transition-all ${
+              className={`px-8 py-3 rounded-full text-sm font-semibold tracking-wide transition-all duration-300 ${
                 selectedCategory === category
-                  ? 'bg-orange-600 text-white shadow-lg transform scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-100 shadow'
+                  ? "bg-gradient-to-t from-brand-dark to-brand-light text-white shadow-lg ring-2 ring-brand-light ring-offset-2"
+                  : "bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 border border-gray-200"
               }`}
             >
               {category.charAt(0).toUpperCase() + category.slice(1)}
@@ -79,35 +79,44 @@ export default function MenuPage() {
           {filteredItems.map((item) => (
             <div
               key={item.id}
-              className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
+              className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden group border border-gray-100"
             >
-              <div className="h-64 overflow-hidden">
+              <div className="h-64 overflow-hidden relative">
                 <img
                   src={item.image_url}
                   alt={item.name}
-                  className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
+                <div className="absolute top-4 right-4">
+                  <span className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-gray-800 uppercase tracking-wider shadow-sm">
+                    {item.category}
+                  </span>
+                  {item.special_item && (
+                    <span className="ml-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-sm animate-pulse">
+                      Chef's Special
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="p-6">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-xl font-bold text-gray-800">{item.name}</h3>
-                  <span className="text-orange-600 font-bold text-xl">
+                <div className="flex justify-between items-start mb-3">
+                  <h3 className="text-xl font-bold text-gray-900 group-hover:text-brand-dark transition-colors">
+                    {item.name}
+                  </h3>
+                  <span className="text-xl font-bold bg-gradient-to-t from-brand-dark to-brand-light bg-clip-text text-transparent">
                     ${item.price.toFixed(2)}
                   </span>
                 </div>
-                <p className="text-gray-600 mb-4 leading-relaxed">
+                <p className="text-gray-500 mb-6 leading-relaxed text-sm line-clamp-2">
                   {item.description}
                 </p>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    {item.category.charAt(0).toUpperCase() + item.category.slice(1)}
-                  </span>
+                <div className="flex items-center">
                   <button
                     onClick={() => handleAddToCart(item)}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg flex items-center space-x-2 transition-colors"
+                    className="w-full bg-gray-50 hover:bg-gradient-to-t hover:from-brand-dark hover:to-brand-light text-gray-800 hover:text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 group/btn"
                   >
-                    <Plus className="h-5 w-5" />
-                    <span>Add to Cart</span>
+                    <Plus className="h-5 w-5 group-hover/btn:rotate-90 transition-transform" />
+                    <span>Add to Order</span>
                   </button>
                 </div>
               </div>
