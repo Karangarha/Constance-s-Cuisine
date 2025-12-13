@@ -1,5 +1,11 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { CartItem, MenuItem } from '../lib/supabase';
+import {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
+import { CartItem, MenuItem } from "../lib/supabase";
 
 interface CartContextType {
   cart: CartItem[];
@@ -14,7 +20,23 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("cartItems");
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      console.error("Failed to load cart from local storage", error);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("cartItems", JSON.stringify(cart));
+    } catch (error) {
+      console.error("Failed to save cart to local storage", error);
+    }
+  }, [cart]);
 
   const addToCart = (item: MenuItem) => {
     setCart((prevCart) => {
@@ -78,7 +100,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 export function useCart() {
   const context = useContext(CartContext);
   if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
+    throw new Error("useCart must be used within a CartProvider");
   }
   return context;
 }
