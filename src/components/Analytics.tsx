@@ -77,7 +77,10 @@ export default function Analytics() {
     // Filter for completed orders first (case-insensitive)
     // Filter for completed orders ONLY.
     // This ensures cancelled or pending orders are not included in stats or item counts.
-    let filteredOrders = orders.filter(order => order.status && order.status.toLowerCase() === 'completed');
+    // Filter for completed/finalized orders
+    // Include 'completed', 'delivered', and 'picked_up'
+    const validStatuses = ['completed', 'delivered', 'picked_up'];
+    let filteredOrders = orders.filter(order => order.status && validStatuses.includes(order.status.toLowerCase()));
 
     // Force local time parsing by appending time
     const date = new Date(selectedDate + 'T00:00:00');
