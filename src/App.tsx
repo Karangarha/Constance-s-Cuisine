@@ -6,7 +6,12 @@ import MenuPage from "./pages/MenuPage";
 import CartPage from "./pages/CartPage";
 import { BrowserRouter, Routes, Route } from "react-router";
 import AdminPage from "./pages/AdminPage";
+import LoginPage from "./pages/LoginPage";
+import TrackingPage from "./pages/TrackingPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { AuthProvider } from "./context/AuthContext";
 import { ToasterContainer } from "./ui/toaster";
+import FloatingCart from "./components/FloatingCart";
 
 type Page = "home" | "menu" | "cart";
 
@@ -20,26 +25,40 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <ToasterContainer/>
+      <ToasterContainer />
       <BrowserRouter>
-        <Routes>
-          <Route path="admin" element={<AdminPage />} />
-          <Route
-            path="/"
-            element={
-              <CartProvider>
-                <Navbar currentPage={currentPage} onNavigate={handleNavigate} />
-                {currentPage === "home" && (
-                  <HomePage onNavigate={handleNavigate} />
-                )}
-                {currentPage === "menu" && <MenuPage />}
-                {currentPage === "cart" && (
-                  <CartPage onNavigate={handleNavigate} />
-                )}
-              </CartProvider>
-            }
-          />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+
+            <Route element={<ProtectedRoute />}>
+              <Route path="admin" element={<AdminPage />} />
+            </Route>
+
+            <Route
+              path="/"
+              element={
+                <CartProvider>
+                  <Navbar
+                    currentPage={currentPage}
+                    onNavigate={handleNavigate}
+                  />
+                  <div key={currentPage} className="animate-fade-in-up">
+                    {currentPage === "home" && (
+                      <HomePage onNavigate={handleNavigate} />
+                    )}
+                    {currentPage === "menu" && <MenuPage />}
+                    {currentPage === "cart" && (
+                      <CartPage onNavigate={handleNavigate} />
+                    )}
+                  </div>
+                  <FloatingCart onNavigate={handleNavigate} />
+                </CartProvider>
+              }
+            />
+            <Route path="/track/:orderId" element={<TrackingPage />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </div>
   );
