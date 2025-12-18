@@ -1,5 +1,5 @@
 import { FullOrder, supabase } from "../lib/supabase";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import OrderFilter from "../logic/OrderFilter";
 import {
   Truck,
@@ -34,6 +34,22 @@ export default function OrderHistory({
   useEffect(() => {
     setFilteredOrders(Orders || []);
   }, [Orders]);
+
+  const historyOrders = useMemo(() => {
+    return (Orders || []).filter((o) =>
+      ["completed", "cancelled", "delivered", "picked_up"].includes(o.status)
+    );
+  }, [Orders]);
+
+  const filterCounts = useMemo(() => {
+    return {
+      all: historyOrders.length,
+      completed: (Orders || []).filter((o) =>
+        ["completed", "delivered", "picked_up"].includes(o.status)
+      ).length,
+      cancelled: (Orders || []).filter((o) => o.status === "cancelled").length,
+    };
+  }, [Orders, historyOrders.length]);
 
   const toggleExpand = (orderId: string) => {
     setExpandedOrders((prev) => {
@@ -102,20 +118,10 @@ export default function OrderHistory({
       </div>
 
       <OrderFilter
-        orders={(Orders || []).filter((o) =>
-          ["completed", "cancelled"].includes(o.status)
-        )}
+        orders={historyOrders}
         onFilter={setFilteredOrders}
         allowedStatuses={["all", "completed", "cancelled"]}
-        counts={{
-          all: (Orders || []).filter((o) =>
-            ["completed", "cancelled"].includes(o.status)
-          ).length,
-          completed: (Orders || []).filter((o) => o.status === "completed")
-            .length,
-          cancelled: (Orders || []).filter((o) => o.status === "cancelled")
-            .length,
-        }}
+        counts={filterCounts}
       />
 
       {filteredOrders.length === 0 ? (

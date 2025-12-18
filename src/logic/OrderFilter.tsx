@@ -7,7 +7,15 @@ interface OrderFilterProps {
   onFilter: (filteredOrders: FullOrder[]) => void;
 }
 
-export default function OrderFilter({ orders, onFilter, counts = {}, allowedStatuses }: OrderFilterProps & { counts?: Record<string, number>, allowedStatuses?: string[] }) {
+export default function OrderFilter({
+  orders,
+  onFilter,
+  counts = {},
+  allowedStatuses,
+}: OrderFilterProps & {
+  counts?: Record<string, number>;
+  allowedStatuses?: string[];
+}) {
   const [searchOrder, setSearchOrder] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -21,7 +29,13 @@ export default function OrderFilter({ orders, onFilter, counts = {}, allowedStat
 
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === 'ready' ? (order.status === 'ready' || order.status === 'on_way') : order.status === statusFilter);
+        (statusFilter === "ready"
+          ? order.status === "ready" || order.status === "on_way"
+          : statusFilter === "completed"
+          ? order.status === "completed" ||
+            order.status === "delivered" ||
+            order.status === "picked_up"
+          : order.status === statusFilter);
 
       return matchesSearch && matchesStatus;
     });
@@ -30,16 +44,16 @@ export default function OrderFilter({ orders, onFilter, counts = {}, allowedStat
   }, [searchOrder, statusFilter, orders, onFilter]);
 
   const allTabs = [
-    { id: 'all', label: 'All' },
-    { id: 'pending', label: 'Pending' },
-    { id: 'preparing', label: 'Preparing' },
-    { id: 'ready', label: 'Ready' },
-    { id: 'completed', label: 'Completed' },
-    { id: 'cancelled', label: 'Cancelled' },
+    { id: "all", label: "All" },
+    { id: "pending", label: "Pending" },
+    { id: "preparing", label: "Preparing" },
+    { id: "ready", label: "Ready" },
+    { id: "completed", label: "Completed" },
+    { id: "cancelled", label: "Cancelled" },
   ];
 
   const tabs = allowedStatuses
-    ? allTabs.filter(tab => allowedStatuses.includes(tab.id))
+    ? allTabs.filter((tab) => allowedStatuses.includes(tab.id))
     : allTabs;
 
   return (
@@ -63,20 +77,24 @@ export default function OrderFilter({ orders, onFilter, counts = {}, allowedStat
             onClick={() => setStatusFilter(tab.id)}
             className={`
               flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200
-              ${statusFilter === tab.id
-                ? 'bg-gray-900 text-white shadow-md transform scale-105'
-                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              ${
+                statusFilter === tab.id
+                  ? "bg-gray-900 text-white shadow-md transform scale-105"
+                  : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:bg-gray-50"
               }
             `}
           >
             {tab.label}
-            <span className={`
+            <span
+              className={`
               px-2 py-0.5 rounded-full text-xs font-bold
-              ${statusFilter === tab.id
-                ? 'bg-white/20 text-white'
-                : 'bg-gray-100 text-gray-600'
+              ${
+                statusFilter === tab.id
+                  ? "bg-white/20 text-white"
+                  : "bg-gray-100 text-gray-600"
               }
-            `}>
+            `}
+            >
               {counts[tab.id] || 0}
             </span>
           </button>

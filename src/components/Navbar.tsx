@@ -1,4 +1,5 @@
 import { ShoppingCart, Menu, X } from "lucide-react";
+import logo from "../public/logo.png";
 import { useCart } from "../context/CartContext";
 import { useState, useEffect } from "react";
 
@@ -49,7 +50,7 @@ export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
             className="flex items-center cursor-pointer"
             onClick={() => onNavigate("home")}
           >
-            <img src="src\public\logo.png" alt="logo" className="h-24" />
+            <img src={logo} alt="logo" className="h-24" />
           </div>
 
           {/* Desktop Menu */}
